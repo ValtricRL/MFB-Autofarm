@@ -1,0 +1,212 @@
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+
+--// SETTINGS
+local AutoFarm = false
+local AutoRebirth = false
+local AutoCollect = false
+local TeleportSpeed = 0.1
+local MinimumCashPerSecond = 1 -- millions
+
+--// WINDOW
+local Window = Rayfield:CreateWindow({
+	Name = "MFB Autofarm By Valtric",
+	LoadingTitle = "MFB Autofarm",
+	LoadingSubtitle = "by Valtric",
+	ConfigurationSaving = {
+		Enabled = false
+	}
+})
+
+local Tab = Window:CreateTab("Main", 4483362458)
+
+--// AUTO FARM
+Tab:CreateToggle({
+	Name = "Auto Farm",
+	CurrentValue = false,
+	Flag = "AutoFarmToggle",
+	Callback = function(Value)
+		AutoFarm = Value
+	end,
+})
+
+--// AUTO REBIRTH
+Tab:CreateToggle({
+	Name = "Auto Rebirth",
+	CurrentValue = false,
+	Flag = "AutoRebirthToggle",
+	Callback = function(Value)
+		AutoRebirth = Value
+	end,
+})
+
+--// AUTO COLLECT
+Tab:CreateToggle({
+	Name = "Auto Collect Money",
+	CurrentValue = false,
+	Flag = "AutoCollectToggle",
+	Callback = function(Value)
+		AutoCollect = Value
+	end,
+})
+
+--// SPEED
+Tab:CreateSlider({
+	Name = "Loop Speed",
+	Range = {0.1, 5},
+	Increment = 0.1,
+	Suffix = "sec",
+	CurrentValue = 0.1,
+	Flag = "SpeedSlider",
+	Callback = function(Value)
+		TeleportSpeed = Value
+	end,
+})
+
+--// MIN CPS
+Tab:CreateInput({
+	Name = "Minimum CashPerSecond (Millions)",
+	PlaceholderText = "1",
+	RemoveTextAfterFocusLost = false,
+	Callback = function(Text)
+		local num = tonumber(Text)
+
+		if num then
+			MinimumCashPerSecond = num
+		end
+	end,
+})
+
+--// FLOAT
+local function FloatCharacter(hrp)
+	local bv = hrp:FindFirstChild("MFB_Float")
+
+	if not bv then
+		bv = Instance.new("BodyVelocity")
+		bv.Name = "MFB_Float"
+		bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+		bv.Velocity = Vector3.new(0,0,0)
+		bv.Parent = hrp
+	end
+end
+
+local function RemoveFloat(hrp)
+	local bv = hrp:FindFirstChild("MFB_Float")
+
+	if bv then
+		bv:Destroy()
+	end
+end
+
+
+--// AUTO REBIRTH
+task.spawn(function()
+	while true do
+		if AutoRebirth then
+			pcall(function()
+				ReplicatedStorage.Remotes.Rebirth:FireServer()
+			end)
+		end
+
+		task.wait(2)
+	end
+end)
+
+--// AUTO COLLECT MONEY
+task.spawn(function()
+	while true do
+		if AutoCollect then
+			for i = 1, 24 do
+				local args = {
+					[1] = tostring(i)
+				}
+
+				pcall(function()
+					ReplicatedStorage
+						.Remotes
+						.CollectStandCash
+						:FireServer(unpack(args))
+				end)
+
+				task.wait(0.01)
+			end
+		end
+
+		task.wait(3)
+	end
+end)
+
+--// AUTO FARM
+task.spawn(function()
+	while true do
+		local character = player.Character or player.CharacterAdded:Wait()
+		local hrp = character:WaitForChild("HumanoidRootPart")
+
+		if AutoFarm then
+			FloatCharacter(hrp)
+
+			local bestModel = nil
+			local highest = MinimumCashPerSecond * 1000000
+
+			-- FIND BEST NORMAL
+			for _, obj in pairs(workspace:GetDescendants()) do
+				if obj:IsA("Model") and obj.Name == "Normal" then
+					local cps = obj:GetAttribute("CashPerSecond")
+
+					if typeof(cps) == "number" and cps >= highest then
+						local part = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+
+						if part then
+							highest = cps
+							bestModel = obj
+						end
+					end
+				end
+			end
+
+			-- TP TO BEST BRAINROT
+			if bestModel then
+				local part = bestModel.PrimaryPart or bestModel:FindFirstChildWhichIsA("BasePart")
+
+				if part then
+					-- 5 STUDS BELOW
+					hrp.CFrame = part.CFrame + Vector3.new(0,-5,0)
+
+					task.wait(0.05)
+
+					-- HOLD E FOR 1 SECOND
+					VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+					task.wait(1)
+					VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+
+					task.wait(0.05)
+				end
+			end
+
+			-- TP BACK TO BASE
+			local plotName = player:GetAttribute("PlotName")
+
+			if plotName then
+				local plot = workspace.Plots:FindFirstChild(tostring(plotName))
+
+				if plot and plot:FindFirstChild("Decor") then
+					local children = plot.Decor:GetChildren()
+
+					if children[2] and children[2]:IsA("BasePart") then
+						-- FLOAT ABOVE BASE
+						hrp.CFrame = children[2].CFrame + Vector3.new(0,10,0)
+					end
+				end
+			end
+		else
+			RemoveFloat(hrp)
+		end
+
+		task.wait(TeleportSpeed)
+	end
+end)
